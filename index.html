@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Optimización de descuento</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: lectura en una columna; el laboratorio es un panel de controles fijo a la izquierda + gráficas, tabla y análisis que se recalculan en vivo */
+:root{
+  --bg:#f3f5f9;--surface:#ffffff;--ink:#131c2b;--muted:#566176;--line:#dce1ea;--soft:#e9edf5;
+  --accent:#2442c9;--accent-soft:#e3e8fb;--tag:#e3a90b;--tag-ink:#3b2b00;
+  --gain:#13804f;--gain-soft:rgba(19,128,79,.14);--loss:#c0383b;--loss-soft:rgba(192,56,59,.13);
+  --s1:#2442c9;--s2:#0d8b86;--s3:#b13f95;--s4:#c86e06;
+  --display:"Bricolage Grotesque","Segoe UI",system-ui,sans-serif;
+  --body:"Source Sans 3","Segoe UI",system-ui,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0e131d;--surface:#161d2a;--ink:#e9eef8;--muted:#9aa6bb;--line:#29334a;--soft:#1d2636;
+  --accent:#8ea4ff;--accent-soft:#222d4d;--tag:#f2c230;--tag-ink:#2a1f00;
+  --gain:#4fd193;--gain-soft:rgba(79,209,147,.15);--loss:#ff7f7f;--loss-soft:rgba(255,127,127,.14);
+  --s1:#8ea4ff;--s2:#3fd0c8;--s3:#ec7fd0;--s4:#f4a64a;color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0e131d;--surface:#161d2a;--ink:#e9eef8;--muted:#9aa6bb;--line:#29334a;--soft:#1d2636;
+  --accent:#8ea4ff;--accent-soft:#222d4d;--tag:#f2c230;--tag-ink:#2a1f00;
+  --gain:#4fd193;--gain-soft:rgba(79,209,147,.15);--loss:#ff7f7f;--loss-soft:rgba(255,127,127,.14);
+  --s1:#8ea4ff;--s2:#3fd0c8;--s3:#ec7fd0;--s4:#f4a64a;color-scheme:dark}
+
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--ink);font:17px/1.6 var(--body);
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--bg)}
+.wrap{max-width:1180px;margin:0 auto}
+h1,h2,h3{font-family:var(--display);text-wrap:balance;margin:0;line-height:1.1}
+h2{font-size:clamp(28px,3.4vw,40px);font-weight:800;letter-spacing:-.01em}
+h3{font-size:19px;font-weight:700}
+p{margin:0}
+.eyebrow{font:600 12px/1.2 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.prose{max-width:70ch;display:grid;gap:12px}
+.prose p{color:var(--muted)}
+.prose b{color:var(--ink)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:4px}
+.up{color:var(--gain)}.down{color:var(--loss)}
+
+/* Hero */
+.hero{padding-block:52px 36px;display:grid;grid-template-columns:minmax(0,1.45fr) minmax(0,1fr);gap:40px;align-items:center}
+.ai-mark{display:inline-flex;align-items:center;gap:8px;margin-bottom:18px;padding:6px 12px;border:1px solid var(--accent);border-radius:999px;background:var(--accent-soft);color:var(--accent);font:600 13px var(--body)}
+.hero h1{font-size:clamp(44px,7vw,84px);font-weight:800;letter-spacing:-.025em;margin:14px 0 18px}
+.hero blockquote{margin:0;font-size:19px;color:var(--muted);max-width:46ch;border-left:3px solid var(--tag);padding-left:16px}
+.hero blockquote b{color:var(--ink)}
+.tagcard{justify-self:center;position:relative;background:var(--surface);border:1px solid var(--line);border-radius:14px 14px 14px 46px;padding:26px 28px 24px 46px;width:min(100%,360px);box-shadow:0 18px 40px -24px rgba(20,30,60,.35);display:grid;gap:6px}
+.tagcard::before{content:"";position:absolute;left:18px;top:50%;width:14px;height:14px;margin-top:-7px;border-radius:50%;background:var(--bg);border:2px solid var(--line)}
+.tagcard .plu{font:600 11px var(--mono);letter-spacing:.08em;color:var(--muted)}
+.tagcard .prod{font:700 17px/1.3 var(--display)}
+.tagcard .price{font:800 50px/1 var(--display);margin-top:6px}
+.tagcard .sub{font-size:14px;color:var(--muted)}
+
+.index{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);border-bottom:1px solid var(--line);padding-block:10px}
+.index ul{list-style:none;margin:0 auto;padding:0;max-width:1180px;display:flex;gap:6px;overflow-x:auto;scrollbar-width:none}
+.index a{display:block;white-space:nowrap;text-decoration:none;color:var(--muted);font:600 14px var(--body);padding:6px 12px;border-radius:999px}
+.index a:hover{background:var(--soft);color:var(--ink)}
+section.block{padding-block:52px;border-bottom:1px solid var(--line);display:grid;gap:28px}
+section[id]{scroll-margin-top:64px}
+
+/* Ficha + modelo */
+.two{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:28px;align-items:start}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px}
+.ficha{padding:6px 20px}
+.ficha div{display:flex;justify-content:space-between;gap:16px;padding:9px 0;border-bottom:1px solid var(--line);font-size:15px}
+.ficha div:last-child{border-bottom:0}
+.ficha span{color:var(--muted)}
+.ficha b{text-align:right;font-weight:600}
+.inputs{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));overflow:hidden}
+.inputs div{padding:14px 16px;border-right:1px solid var(--line);display:grid;gap:2px;min-width:0}
+.inputs div:last-child{border-right:0}
+.inputs span{font-size:13px;color:var(--muted)}
+.inputs b{font:600 18px var(--mono);overflow-wrap:anywhere}
+.eqs{padding:6px 20px}
+.eq{display:grid;grid-template-columns:150px minmax(0,1fr);gap:12px;padding:11px 0;border-bottom:1px solid var(--line);align-items:baseline}
+.eq:last-child{border-bottom:0}
+.eq span{font-size:14px;color:var(--muted)}
+.eq code{font:600 15px/1.5 var(--mono);overflow-wrap:anywhere}
+.rule{background:var(--accent-soft);border-radius:12px;padding:20px;display:grid;gap:10px}
+.rule code{font:600 15px var(--mono)}
+
+/* Laboratorio */
+.lab{display:grid;grid-template-columns:300px minmax(0,1fr);gap:24px;align-items:start}
+.controls{position:sticky;top:64px;padding:18px;display:grid;gap:16px}
+.presets{display:grid;gap:6px}
+.presets button{all:unset;cursor:pointer;display:grid;gap:1px;padding:9px 12px;border:1px solid var(--line);border-radius:9px;font-size:14px}
+.presets button small{color:var(--muted);font:12px var(--mono)}
+.presets button:hover{border-color:var(--accent)}
+.presets button[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-soft)}
+.presets button:focus-visible{outline:2px solid var(--accent)}
+.ctl{display:grid;gap:4px}
+.ctl label{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:14px;font-weight:600}
+.ctl input[type=number]{width:108px;font:600 14px var(--mono);text-align:right;padding:4px 8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink)}
+.ctl input[type=range]{width:100%;accent-color:var(--accent)}
+.ctl.dsel{background:color-mix(in srgb,var(--tag) 16%,transparent);border-radius:10px;padding:10px 12px}
+.ctl.dsel input[type=range]{accent-color:var(--tag)}
+.btnrow{display:flex;gap:8px;flex-wrap:wrap}
+.btn{all:unset;cursor:pointer;font:600 13px var(--body);padding:7px 12px;border-radius:8px;background:var(--soft);color:var(--ink)}
+.btn:hover{background:var(--line)}
+.btn:focus-visible{outline:2px solid var(--accent)}
+.hint{font-size:13px;color:var(--muted)}
+.warn{font-size:13px;color:var(--loss)}
+.labmain{display:grid;gap:20px;min-width:0}
+.kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.kpi{padding:12px 14px;display:grid;gap:2px;border-top:3px solid var(--line)}
+.kpi.sel{border-top-color:var(--tag)}.kpi.opt{border-top-color:var(--accent)}
+.kpi span{font-size:13px;color:var(--muted)}
+.kpi b{font:800 24px/1.15 var(--display);font-variant-numeric:tabular-nums}
+.kpi em{font:600 12px var(--mono);font-style:normal;color:var(--muted)}
+.verdict{display:inline-flex;font:700 13px var(--mono);padding:6px 10px;border-radius:6px;justify-self:start}
+.verdict.yes{background:var(--gain-soft);color:var(--gain)}
+.verdict.no{background:var(--loss-soft);color:var(--loss)}
+.charts{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px}
+figure{margin:0;padding:16px 16px 12px;display:grid;gap:8px;min-width:0}
+figcaption{display:grid;gap:2px}
+figcaption b{font:700 16px var(--display)}
+figcaption span{font-size:13px;color:var(--muted)}
+.drag{cursor:ew-resize;touch-action:pan-y}
+svg.chart{width:100%;height:auto;display:block;user-select:none}
+.legend{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12px;color:var(--muted)}
+.legend i{display:inline-block;width:14px;height:3px;border-radius:2px;margin-right:6px;vertical-align:middle}
+.legend i.dot{width:10px;height:10px;border-radius:50%}
+.legend i.sq{height:10px;border-radius:2px}
+.tablewrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:14px;font-variant-numeric:tabular-nums}
+th,td{padding:8px 12px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
+th{font:600 11px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);background:var(--soft)}
+td{font-family:var(--mono)}
+th:first-child,td:first-child{text-align:left}
+tr:last-child td{border-bottom:0}
+tr.is-sel td{background:color-mix(in srgb,var(--tag) 22%,transparent);font-weight:600}
+tr.is-opt td{box-shadow:inset 3px 0 0 var(--accent)}
+tbody tr{cursor:pointer}
+tbody tr:hover td{background:var(--soft)}
+.steps{margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,400px),1fr));column-gap:28px;counter-reset:s}
+.steps li{list-style:none;display:grid;grid-template-columns:28px minmax(0,1fr);gap:10px;padding:10px 0;border-bottom:1px dashed var(--line)}
+.steps li::before{counter-increment:s;content:counter(s);font:700 13px var(--mono);color:var(--accent);background:var(--accent-soft);width:24px;height:24px;border-radius:50%;display:grid;place-items:center}
+.steps b{font:700 14px var(--body)}
+.steps code{display:block;font:600 13.5px/1.6 var(--mono);overflow-wrap:anywhere}
+.steps p{font-size:14px;color:var(--muted)}
+.interp{border-left:4px solid var(--tag);padding:4px 0 4px 20px;display:grid;gap:12px;max-width:76ch}
+.interp p{color:var(--ink)}
+.conclude{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px 32px;margin:0;padding:0;list-style:none}
+.conclude li{display:grid;gap:6px;padding-top:14px;border-top:2px solid var(--ink)}
+.conclude li p{color:var(--muted)}
+.limits{background:var(--soft);border-radius:12px;padding:20px;max-width:none}
+
+/* Chart marks */
+.ax{stroke:var(--line);stroke-width:1}
+.ax0{stroke:var(--muted);stroke-width:1.2}
+.tk{fill:var(--muted);font:11px var(--mono)}
+.lab-t{fill:var(--ink);font:600 12px var(--mono)}
+.l-g{stroke:var(--accent);stroke-width:3;fill:none}
+.l-i{stroke:var(--s2);stroke-width:2.5;fill:none}
+.l-c{stroke:var(--s4);stroke-width:2.5;fill:none}
+.l-dp{stroke:var(--s3);stroke-width:3;fill:none}
+.base{stroke:var(--muted);stroke-width:1.4;stroke-dasharray:5 4;fill:none}
+.band{fill:var(--gain-soft)}
+.a-pos{fill:var(--gain-soft)}.a-neg{fill:var(--loss-soft)}
+.m-opt{fill:var(--accent);stroke:var(--surface);stroke-width:2}
+.m-sel{fill:var(--tag);stroke:var(--surface);stroke-width:2}
+.v-sel{stroke:var(--tag);stroke-width:2}
+.v-thr{stroke:var(--muted);stroke-width:1.4;stroke-dasharray:3 3}
+
+@media (max-width:980px){
+  .lab{grid-template-columns:minmax(0,1fr)}
+  .controls{position:static}
+}
+@media (max-width:860px){
+  .hero,.two,.charts{grid-template-columns:minmax(0,1fr)}
+  .kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .inputs{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .inputs div{border-bottom:1px solid var(--line)}
+  .conclude{grid-template-columns:minmax(0,1fr)}
+  .hero{padding-block:32px 24px}
+}
+@media (max-width:460px){.eq{grid-template-columns:minmax(0,1fr);gap:2px}}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header class="hero">
+    <div>
+      <div class="ai-mark" role="note"><span aria-hidden="true">✦</span>Análisis realizado con apoyo de inteligencia artificial</div>
+      <div class="eyebrow">Matemáticas aplicadas · Derivadas y optimización</div>
+      <h1>Optimización de descuento</h1>
+      <blockquote>¿Qué <b>porcentaje de descuento</b> permite maximizar la ganancia de un producto de Grupo Éxito, considerando la relación entre el precio, el volumen de ventas y los costos mediante un modelo matemático basado en derivadas?</blockquote>
+    </div>
+    <div class="tagcard" aria-label="Producto analizado">
+      <span class="plu">PLU 3326794 · ALIMENTOS – LÁCTEOS</span>
+      <span class="prod">Leche entera UHT marca propia · paquete 6 × 900 ml</span>
+      <span class="price">$ 17.880</span>
+      <span class="sub">Precio histórico observado, 26 – 29 de abril de 2024</span>
+    </div>
+  </header>
+</div>
+
+<nav class="index" aria-label="Secciones">
+  <ul>
+    <li><a href="#producto">Producto y datos</a></li>
+    <li><a href="#modelo">Modelo</a></li>
+    <li><a href="#laboratorio">Laboratorio</a></li>
+    <li><a href="#escenarios">Escenarios</a></li>
+    <li><a href="#sensibilidad">Sensibilidad</a></li>
+    <li><a href="#conclusiones">Conclusiones</a></li>
+  </ul>
+</nav>
+
+<main class="wrap">
+  <section class="block" id="producto">
+    <div class="prose">
+      <div class="eyebrow">Variables y delimitación</div>
+      <h2>Producto y valores del modelo</h2>
+      <p>La unidad de análisis es el <b>paquete</b> de seis leches. Estos son los valores que ingresan directamente al modelo.</p>
+    </div>
+    <div class="card inputs">
+      <div><span>Precio base P₀</span><b>$ 17.880</b></div>
+      <div><span>Costo unitario C</span><b>$ 13.928</b></div>
+      <div><span>Elasticidad E</span><b>−1,048</b></div>
+      <div><span>Demanda base Q₀</span><b>1.000</b></div>
+      <div><span>Rango de descuento</span><b>0 ≤ d ≤ 0,25</b></div>
+    </div>
+    <div class="two">
+      <div class="card ficha">
+        <div><span>Empresa</span><b>Grupo Éxito</b></div>
+        <div><span>Producto</span><b>Leche entera marca propia</b></div>
+        <div><span>Tipo</span><b>Leche líquida entera UHT</b></div>
+        <div><span>Presentación</span><b>6 unidades × 900 ml (5.400 ml)</b></div>
+        <div><span>Categoría</span><b>Alimentos – Lácteos</b></div>
+      </div>
+      <div class="card ficha">
+        <div><span>Unidad de análisis</span><b>Paquete</b></div>
+        <div><span>Precio histórico observado</span><b>$ 17.880</b></div>
+        <div><span>Fecha del precio</span><b>26 – 29 de abril de 2024</b></div>
+        <div><span>Fuente del precio</span><b>Publicación oficial de Grupo Éxito</b></div>
+        <div><span>Precio individual actual observado</span><b>$ 1.950 (portal oficial)</b></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="block" id="modelo">
+    <div class="prose">
+      <div class="eyebrow">El modelo</div>
+      <h2>Precio, demanda, elasticidad y ganancia</h2>
+      <p>El descuento <b>d</b> se expresa en tanto por uno (0,10 = 10 %). La elasticidad indica cuánto cambia la cantidad vendida, en porcentaje, por cada 1 % que baja el precio.</p>
+    </div>
+    <div class="two">
+      <div class="card eqs">
+        <div class="eq"><span>Función de precio</span><code>p(d) = P₀ · (1 − d)</code></div>
+        <div class="eq"><span>Elasticidad precio</span><code>E = (ΔQ/Q₀) / (Δp/P₀)</code></div>
+        <div class="eq"><span>Función de demanda</span><code>Q(d) = Q₀ · (1 + |E| · d)</code></div>
+        <div class="eq"><span>Ingreso</span><code>I(d) = p(d) · Q(d)</code></div>
+        <div class="eq"><span>Costo total</span><code>CT(d) = C · Q(d)</code></div>
+        <div class="eq"><span>Función de ganancia</span><code>G(d) = [P₀(1 − d) − C] · Q₀(1 + |E|d)</code></div>
+      </div>
+      <div style="display:grid;gap:16px">
+        <div class="rule">
+          <h3>Derivada y punto crítico</h3>
+          <code>G′(d) = Q₀ · [ |E|(P₀ − C) − P₀ − 2|E|P₀ · d ]</code>
+          <code>G′(d) = 0  ⇒  d* = ½ · (1 − C/P₀ − 1/|E|)</code>
+          <code>G″(d) = −2|E| · P₀ · Q₀ &lt; 0</code>
+          <p>La segunda derivada siempre es negativa: la ganancia es cóncava y el punto crítico es un <b>máximo</b>. Si d* cae fuera de [0; 0,25], el máximo está en un extremo del intervalo.</p>
+        </div>
+        <div class="rule">
+          <h3>Condición para que el descuento convenga</h3>
+          <p>El descuento aumenta la ganancia solo si <code>G′(0) &gt; 0</code>, es decir, si</p>
+          <code>|E| &gt; P₀ / (P₀ − C)</code>
+          <p>Con los datos del producto: 17.880 / 3.952 = <b>4,524</b>. La elasticidad observada es 1,048.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="block" id="laboratorio">
+    <div class="prose">
+      <div class="eyebrow">Laboratorio interactivo</div>
+      <h2>Mueve el descuento y los parámetros</h2>
+      <p>Arrastra sobre cualquier gráfica con eje de descuento, usa el control amarillo o haz clic en una fila de la tabla. Todo se recalcula: gráficas, tabla, derivadas e interpretación. Los escenarios cargan valores predefinidos.</p>
+    </div>
+    <div class="lab">
+      <aside class="card controls" aria-label="Controles del modelo">
+        <div class="presets" id="presets"></div>
+        <div class="ctl dsel">
+          <label for="d_n">Descuento evaluado d (%)<input type="number" id="d_n" step="0.1"></label>
+          <input type="range" id="d_r" step="0.1" aria-label="Descuento evaluado">
+        </div>
+        <div class="ctl"><label for="P0_n">Precio base P₀ ($)<input type="number" id="P0_n" step="10"></label><input type="range" id="P0_r" min="5000" max="40000" step="10" aria-label="Precio base"></div>
+        <div class="ctl"><label for="C_n">Costo unitario C ($)<input type="number" id="C_n" step="1"></label><input type="range" id="C_r" min="1000" max="40000" step="1" aria-label="Costo unitario"></div>
+        <div class="ctl"><label for="E_n">Elasticidad E<input type="number" id="E_n" step="0.001"></label><input type="range" id="E_r" min="-15" max="-0.1" step="0.001" aria-label="Elasticidad"></div>
+        <div class="ctl"><label for="Q0_n">Demanda base Q₀<input type="number" id="Q0_n" step="10"></label><input type="range" id="Q0_r" min="100" max="10000" step="10" aria-label="Demanda base"></div>
+        <div class="ctl"><label for="dmax_n">Descuento máximo (%)<input type="number" id="dmax_n" step="1"></label><input type="range" id="dmax_r" min="5" max="60" step="1" aria-label="Descuento máximo"></div>
+        <div class="btnrow"><button class="btn" id="toOpt" type="button">Ir al óptimo</button><button class="btn" id="reset" type="button">Restablecer Éxito</button></div>
+        <p class="warn" id="warn" hidden></p>
+      </aside>
+
+      <div class="labmain">
+        <span class="verdict" id="verdict"></span>
+        <div class="kpis card" id="kpis"></div>
+        <div class="charts">
+          <figure class="card"><figcaption><b>Ganancia G(d)</b><span>Línea amarilla: descuento evaluado. Punto azul: máximo en el intervalo.</span></figcaption><div class="drag" id="chG"></div>
+            <div class="legend"><span><i style="background:var(--accent)"></i>G(d)</span><span><i style="background:var(--muted)"></i>G(0)</span><span><i class="sq" style="background:var(--gain-soft)"></i>Mejor que no descontar</span></div></figure>
+          <figure class="card"><figcaption><b>Derivada G′(d)</b><span>Positiva: más descuento sube la ganancia. Negativa: la baja.</span></figcaption><div class="drag" id="chD"></div>
+            <div class="legend"><span><i style="background:var(--s3)"></i>G′(d)</span><span><i style="background:var(--muted)"></i>G′ = 0</span></div></figure>
+          <figure class="card"><figcaption><b>Ingreso y costo total</b><span>La franja entre curvas es la ganancia; roja si hay pérdida.</span></figcaption><div class="drag" id="chI"></div>
+            <div class="legend"><span><i style="background:var(--s2)"></i>I(d)</span><span><i style="background:var(--s4)"></i>CT(d)</span><span><i class="sq" style="background:var(--gain-soft)"></i>Ganancia</span><span><i class="sq" style="background:var(--loss-soft)"></i>Pérdida</span></div></figure>
+          <figure class="card"><figcaption><b>Precio y demanda</b><span>El precio baja y la cantidad vendida sube con el descuento.</span></figcaption><div class="drag" id="chQ"></div>
+            <div class="legend"><span><i style="background:var(--s4)"></i>Precio p(d)</span><span><i style="background:var(--s2)"></i>Paquetes Q(d), escala derecha</span></div></figure>
+        </div>
+        <div class="card tablewrap">
+          <table><thead><tr><th>Descuento</th><th>Precio</th><th>Paquetes</th><th>Ingreso</th><th>Costo total</th><th>Ganancia</th><th>vs. d = 0</th><th>G′(d)</th></tr></thead><tbody id="rows"></tbody></table>
+        </div>
+        <div class="card" style="padding:18px 20px;display:grid;gap:8px">
+          <h3>Análisis paso a paso</h3>
+          <ol class="steps" id="steps"></ol>
+        </div>
+        <div class="interp" id="interp"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="block" id="escenarios">
+    <div class="prose">
+      <div class="eyebrow">Escenarios</div>
+      <h2>El mismo modelo en cuatro escenarios</h2>
+      <p>El escenario A usa los datos del producto. B, C y D son <b>hipotéticos</b>: cambian la elasticidad o el costo para ver cuándo un descuento empezaría a ser rentable. Haz clic en una fila para cargarlo en el laboratorio.</p>
+    </div>
+    <figure class="card">
+      <figcaption><b>Cambio de la ganancia frente a no descontar</b><span>Por encima de 0 % el descuento conviene. Punto: máximo de cada escenario en [0; 25 %].</span></figcaption>
+      <div id="chCmp"></div>
+      <div class="legend" id="cmpLegend"></div>
+    </figure>
+    <div class="card tablewrap">
+      <table><thead><tr><th>Escenario</th><th>C</th><th>E</th><th>Umbral P₀/(P₀−C)</th><th>d crítico</th><th>d óptimo</th><th>G(0)</th><th>G máxima</th><th>Cambio</th></tr></thead><tbody id="cmpRows"></tbody></table>
+    </div>
+    <div class="interp" id="cmpText"></div>
+  </section>
+
+  <section class="block" id="sensibilidad">
+    <div class="prose">
+      <div class="eyebrow">Análisis de sensibilidad</div>
+      <h2>¿Qué tan sensible tendría que ser la demanda?</h2>
+      <p>Con el precio y el costo del laboratorio, la gráfica muestra el descuento crítico d* para cada valor de |E|. La línea punteada marca el umbral desde el cual descontar empieza a convenir.</p>
+    </div>
+    <div class="two">
+      <figure class="card"><figcaption><b>Descuento crítico d* según la elasticidad</b><span>Zona verde: d* dentro del rango permitido. Punto amarillo: elasticidad actual.</span></figcaption><div id="chS"></div></figure>
+      <div class="card tablewrap"><table><thead><tr><th>E</th><th>d óptimo</th><th>Ganancia máxima</th><th>Cambio vs. d = 0</th></tr></thead><tbody id="sensRows"></tbody></table></div>
+    </div>
+    <div class="interp" id="sensText"></div>
+  </section>
+
+  <section class="block" id="conclusiones" style="border-bottom:0">
+    <div class="prose">
+      <div class="eyebrow">Conclusiones</div>
+      <h2>Respuesta a la pregunta de investigación</h2>
+    </div>
+    <ul class="conclude">
+      <li><h3>El descuento óptimo es 0 %</h3><p>Con P₀ = $17.880, C = $13.928 y E = −1,048, el punto crítico es d = −36,66 %, fuera del intervalo. La ganancia máxima en [0; 0,25] está en d = 0: $3.952.000 por cada 1.000 paquetes.</p></li>
+      <li><h3>La derivada lo confirma desde el inicio</h3><p>G′(0) = −13.738.304 por unidad de d: cada punto de descuento inicial resta cerca de $137.383. Como G″ &lt; 0, la ganancia solo puede bajar al aumentar d.</p></li>
+      <li><h3>El margen es demasiado estrecho</h3><p>El margen unitario es 22,1 % ($3.952 por paquete). Un aumento de ventas de 1,048 % por cada 1 % de descuento no compensa lo que se deja de cobrar.</p></li>
+      <li><h3>Desde 22,1 % hay pérdida</h3><p>Con ese descuento el precio iguala al costo ($13.928). En el extremo del intervalo, 25 %, la ganancia es −$653.716.</p></li>
+      <li><h3>El umbral de elasticidad es 4,52</h3><p>Solo si la demanda respondiera con |E| &gt; 4,524 un descuento empezaría a subir la ganancia. Con |E| = 8, el óptimo sería 4,8 %.</p></li>
+      <li><h3>Reducir costo abre espacio</h3><p>Con un costo de $11.500 el umbral baja a 2,80. Combinado con |E| = 8, el descuento óptimo sube a 11,6 % y la ganancia crece 30,1 %.</p></li>
+    </ul>
+    <div class="prose limits">
+      <h3>Límites del modelo</h3>
+      <p>La demanda se aproxima como lineal a partir de la elasticidad medida en el precio base, así que es más confiable para descuentos pequeños. El modelo no incluye costos fijos, competencia, efecto de la promoción sobre otros productos ni compras que solo se adelantan en el tiempo. Los escenarios B, C y D son hipotéticos.</p>
+    </div>
+  </section>
+</main>
+
+<script>
+'use strict';
+const $=id=>document.getElementById(id);
+const fmt=(x,dec=2)=>new Intl.NumberFormat('es-CO',{maximumFractionDigits:dec}).format(x);
+const money=x=>(x<0?'−':'')+'$ '+fmt(Math.round(Math.abs(x)),0);
+const pct=(x,dec=2)=>(x<0?'−':'')+fmt(Math.abs(x)*100,dec)+' %';
+const sgnPct=x=>(x>0?'+':x<0?'−':'')+fmt(Math.abs(x)*100,1)+' %';
+const short=v=>{const a=Math.abs(v),s=v<0?'−':'';if(a>=1e6)return s+'$'+fmt(+(a/1e6).toFixed(2))+' M';if(a>=1e3)return s+'$'+fmt(Math.round(a/1e3))+' mil';return s+'$'+fmt(a,0)};
+
+const BASE={P0:17880,C:13928,E:-1.048,Q0:1000,dmax:.25};
+const PRESETS=[
+  {k:'A',name:'Datos Éxito',note:'C 13.928 · E −1,048',v:{...BASE},color:'--s1'},
+  {k:'B',name:'Clientes más sensibles',note:'C 13.928 · E −8',v:{...BASE,E:-8},color:'--s2'},
+  {k:'C',name:'Menor costo',note:'C 11.500 · E −4',v:{...BASE,C:11500,E:-4},color:'--s3'},
+  {k:'D',name:'Menor costo y más sensibles',note:'C 11.500 · E −8',v:{...BASE,C:11500,E:-8},color:'--s4'},
+];
+const S={...BASE,d:0};
+
+function model(v){
+  const e=Math.abs(v.E),P0=v.P0,C=v.C,Q0=v.Q0;
+  const at=d=>{const p=P0*(1-d),q=Q0*(1+e*d),i=p*q,ct=C*q;return{d,p,q,i,ct,g:i-ct,gp:Q0*(e*(P0-C)-P0-2*e*P0*d)}};
+  const dc=(e*(P0-C)-P0)/(2*e*P0);
+  const dOpt=Math.min(v.dmax,Math.max(0,dc));
+  return{e,at,dc,dOpt,base:at(0),opt:at(dOpt),ext:at(v.dmax),gpp:-2*e*P0*Q0,thr:P0>C?P0/(P0-C):Infinity,dLoss:1-C/P0,m:(P0-C)/P0};
+}
+
+/* ---------- SVG chart ---------- */
+const NS='http://www.w3.org/2000/svg';
+function el(tag,a,parent){const e=document.createElementNS(NS,tag);for(const k in a)e.setAttribute(k,a[k]);if(parent)parent.appendChild(e);return e}
+function ticks(lo,hi,n){const raw=(hi-lo)/n||1,mag=Math.pow(10,Math.floor(Math.log10(raw))),f=raw/mag,st=(f<1.5?1:f<3?2:f<7?5:10)*mag;const t=[];for(let v=Math.ceil(lo/st)*st;v<=hi+st*1e-6;v+=st)t.push(+v.toFixed(10));return{t,st}}
+function chart(host,o){
+  const W=o.W||640,H=o.H||300,L=o.L||70,R=o.R||18,T=16,B=40,pw=W-L-R,ph=H-T-B;
+  const x0=o.xmin||0,x1=o.xmax;
+  let ys=[];o.series.forEach(s=>{if(!s.right)s.pts.forEach(p=>ys.push(p.y))});(o.extraY||[]).forEach(y=>ys.push(y));
+  let lo=o.ymin??Math.min(0,...ys),hi=o.ymax??Math.max(0,...ys);if(hi-lo<1e-9){hi=lo+1}
+  if(o.ymin==null||o.ymax==null){const pad=(hi-lo)*.06;if(o.ymin==null&&lo<0)lo-=pad;if(o.ymax==null)hi+=pad}
+  const X=x=>L+(x-x0)/(x1-x0)*pw,Y=y=>T+(hi-y)/(hi-lo)*ph;
+  const svg=el('svg',{viewBox:`0 0 ${W} ${H}`,class:'chart',role:'img','aria-label':o.label});
+  const id='c'+Math.random().toString(36).slice(2,8);const cp=el('clipPath',{id},el('defs',{},svg));el('rect',{x:L,y:T,width:pw,height:ph},cp);
+  ticks(lo,hi,5).t.forEach(v=>{if(v<lo||v>hi)return;el('line',{x1:L,x2:W-R,y1:Y(v),y2:Y(v),class:Math.abs(v)<1e-9?'ax0':'ax'},svg);el('text',{x:L-8,y:Y(v)+4,'text-anchor':'end',class:'tk'},svg).textContent=o.yfmt(v)});
+  const xs=o.xstep||((x1-x0)<=.3?.05:.1);
+  for(let x=Math.ceil(x0/xs-1e-9)*xs;x<=x1+1e-9;x+=xs)el('text',{x:X(x),y:H-B+18,'text-anchor':'middle',class:'tk'},svg).textContent=(o.xfmt||(v=>Math.round(v*100)+'%'))(x);
+  el('text',{x:L+pw,y:H-4,'text-anchor':'end',class:'tk'},svg).textContent=o.xlabel||'descuento d';
+  const g=el('g',{'clip-path':`url(#${id})`},svg);
+  (o.bands||[]).forEach(b=>{const a=Math.max(x0,b[0]),c=Math.min(x1,b[1]);if(c>a)el('rect',{x:X(a),y:T,width:X(c)-X(a),height:ph,class:'band'},g)});
+  if(o.between){const [A,Bp]=o.between;for(let k=0;k<A.length-1;k++){const pos=(A[k].y+A[k+1].y)>=(Bp[k].y+Bp[k+1].y);el('polygon',{points:[A[k],A[k+1],Bp[k+1],Bp[k]].map(p=>X(p.x).toFixed(1)+','+Y(p.y).toFixed(1)).join(' '),class:pos?'a-pos':'a-neg'},g)}}
+  (o.hlines||[]).forEach(h=>el('line',{x1:L,x2:W-R,y1:Y(h.y),y2:Y(h.y),class:h.cls},g));
+  (o.vlines||[]).forEach(v=>el('line',{x1:X(v.x),x2:X(v.x),y1:T,y2:T+ph,class:v.cls},g));
+  let rY=null;
+  o.series.forEach(s=>{let Yf=Y;
+    if(s.right){const rl=Math.min(...s.pts.map(p=>p.y))*.9,rh=Math.max(...s.pts.map(p=>p.y))*1.05;rY=y=>T+(rh-y)/(rh-rl)*ph;Yf=rY;
+      ticks(rl,rh,5).t.forEach(v=>{if(v<rl||v>rh)return;el('text',{x:W-R+6,y:rY(v)+4,'text-anchor':'start',class:'tk'},svg).textContent=fmt(v,0)})}
+    const clampY=y=>Math.max(-5*H,Math.min(6*H,Yf(y)));
+    const path=el('path',{d:s.pts.map((p,i)=>(i?'L':'M')+X(p.x).toFixed(1)+','+clampY(p.y).toFixed(1)).join(''),class:s.cls||''},g);
+    if(s.color)path.setAttribute('style',`stroke:var(${s.color});stroke-width:2.6;fill:none`)});
+  (o.markers||[]).forEach(m=>{const yy=(m.right?rY:Y)(m.y);if(yy<T-2||yy>T+ph+2)return;el('circle',{cx:X(m.x),cy:yy,r:m.r||6,class:m.cls},svg);
+    if(m.text){const right=X(m.x)>L+pw*.6;el('text',{x:X(m.x)+(right?-10:10),y:yy+(m.dy??-10),'text-anchor':right?'end':'start',class:'lab-t'},svg).textContent=m.text}});
+  host.replaceChildren(svg);
+  if(o.onDrag){host._toX=ev=>{const r=host.querySelector('svg').getBoundingClientRect();const vx=(ev.clientX-r.left)/r.width*W;return Math.max(x0,Math.min(x1,x0+(vx-L)/pw*(x1-x0)))};
+    if(!host._bound){host._bound=true;let on=false;
+      host.addEventListener('pointerdown',ev=>{on=true;try{host.setPointerCapture(ev.pointerId)}catch(_){}o.onDrag(host._toX(ev))});
+      host.addEventListener('pointermove',ev=>{if(on)o.onDrag(host._toX(ev))});
+      ['pointerup','pointercancel'].forEach(t=>host.addEventListener(t,()=>{on=false}));}}
+}
+const sample=(f,a,b,n=120)=>Array.from({length:n+1},(_,k)=>{const x=a+(b-a)*k/n;return{x,y:f(x)}});
+
+/* ---------- Controls ---------- */
+const FIELDS=[['P0',1],['C',1],['E',1],['Q0',1],['dmax',100],['d',100]];
+function setD(d){S.d=Math.max(0,Math.min(S.dmax,Math.round(d*1000)/1000));render()}
+FIELDS.forEach(([k,f])=>['_n','_r'].forEach(sfx=>$(k+sfx).addEventListener('input',e=>{const v=parseFloat(e.target.value);if(!Number.isFinite(v))return;
+  S[k]=v/f;if(k==='E'&&S.E>=0)S.E=-0.001;if(k==='dmax')S.d=Math.min(S.d,S.dmax);render(sfx==='_n'?k:null)})));
+$('presets').innerHTML=PRESETS.map((p,i)=>`<button type="button" data-i="${i}"><span><b>${p.k}</b> · ${p.name}</span><small>${p.note}</small></button>`).join('');
+$('presets').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;Object.assign(S,PRESETS[b.dataset.i].v);S.d=Math.min(S.d,S.dmax);render()});
+$('toOpt').onclick=()=>{S.d=model(S).dOpt;render()};
+$('reset').onclick=()=>{Object.assign(S,BASE,{d:0});render()};
+$('rows').addEventListener('click',e=>{const tr=e.target.closest('tr');if(tr)setD(+tr.dataset.d)});
+
+/* ---------- Render ---------- */
+function render(skip){
+  FIELDS.forEach(([k,f])=>{const v=+(S[k]*f).toFixed(f===100?2:3);if(k!==skip)$(k+'_n').value=v;$(k+'_r').value=v});
+  $('d_r').max=$('d_n').max=+(S.dmax*100).toFixed(2);
+  document.querySelectorAll('#presets button').forEach((b,i)=>{const v=PRESETS[i].v;b.setAttribute('aria-pressed',String(['P0','C','E','Q0','dmax'].every(k=>Math.abs(v[k]-S[k])<1e-9)))});
+  const M=model(S),s=M.at(S.d),b=M.base,o=M.opt,ch=x=>b.g!==0?(x-b.g)/Math.abs(b.g):0;
+  const w=$('warn');w.hidden=!(S.C>=S.P0);w.textContent='El costo es igual o mayor que el precio base: no hay margen y todo descuento aumenta la pérdida.';
+
+  const doDisc=M.dOpt>1e-9;
+  const v=$('verdict');v.className='verdict '+(doDisc?'yes':'no');
+  v.textContent=doDisc?`Descuento óptimo: ${pct(M.dOpt)}${M.dc>S.dmax?' (extremo del intervalo)':''}`:'Descuento óptimo: 0 % · no conviene descontar';
+
+  $('kpis').innerHTML=[
+    ['sel','Precio con '+pct(S.d,1),money(s.p),fmt(s.q,1)+' paquetes'],
+    ['sel','Ganancia con '+pct(S.d,1),money(s.g),sgnPct(ch(s.g))+' vs. d = 0'],
+    ['opt','Ganancia máxima',money(o.g),'en d = '+pct(M.dOpt)],
+    ['','Derivada G′(d)',short(s.gp),s.gp>0?'creciente':'decreciente'],
+  ].map(([c,l,val,em])=>`<div class="kpi ${c}"><span>${l}</span><b class="${c==='sel'&&l.startsWith('Gan')&&s.g<0?'down':''}">${val}</b><em>${em}</em></div>`).join('');
+
+  const xmax=S.dmax,drag={onDrag:setD};
+  const G=sample(d=>M.at(d).g,0,xmax),D=sample(d=>M.at(d).gp,0,xmax),I=sample(d=>M.at(d).i,0,xmax),C=sample(d=>M.at(d).ct,0,xmax);
+  const bandEnd=M.dc>0?2*M.dc:0;
+  chart($('chG'),{...drag,label:'Ganancia según descuento',xmax,yfmt:short,series:[{pts:G,cls:'l-g'}],hlines:[{y:b.g,cls:'base'}],bands:bandEnd>0?[[0,bandEnd]]:[],
+    vlines:[{x:S.d,cls:'v-sel'}],markers:[{x:M.dOpt,y:o.g,cls:'m-opt',r:6},{x:S.d,y:s.g,cls:'m-sel',r:7,text:pct(S.d,1)+' → '+short(s.g)}]});
+  chart($('chD'),{...drag,label:'Derivada de la ganancia',xmax,yfmt:short,series:[{pts:D,cls:'l-dp'}],
+    vlines:[{x:S.d,cls:'v-sel'}],markers:[{x:S.d,y:s.gp,cls:'m-sel',r:7,text:'G′ = '+short(s.gp)}]});
+  chart($('chI'),{...drag,label:'Ingreso y costo total',xmax,yfmt:short,ymin:0,series:[{pts:C,cls:'l-c'},{pts:I,cls:'l-i'}],between:[I,C],vlines:[{x:S.d,cls:'v-sel'}]});
+  chart($('chQ'),{...drag,label:'Precio y demanda',xmax,R:56,yfmt:short,ymin:0,series:[{pts:sample(d=>M.at(d).p,0,xmax),cls:'l-c'},{pts:sample(d=>M.at(d).q,0,xmax),cls:'l-i',right:true}],
+    vlines:[{x:S.d,cls:'v-sel'}],markers:[{x:S.d,y:s.p,cls:'m-sel',r:6,text:money(s.p)}]});
+
+  // tabla
+  const ds=[];for(let k=0;k<=10;k++)ds.push(xmax*k/10);
+  [S.d,M.dOpt].forEach(x=>{if(!ds.some(y=>Math.abs(y-x)<1e-6))ds.push(x)});ds.sort((a,c)=>a-c);
+  $('rows').innerHTML=ds.map(d=>{const r=M.at(d);const cls=[Math.abs(d-S.d)<1e-6?'is-sel':'',Math.abs(d-M.dOpt)<1e-6?'is-opt':''].join(' ');
+    return `<tr class="${cls}" data-d="${d}"><td>${pct(d)}${Math.abs(d-M.dOpt)<1e-6?' · máx':''}</td><td>${money(r.p)}</td><td>${fmt(r.q,1)}</td><td>${money(r.i)}</td><td>${money(r.ct)}</td><td class="${r.g<0?'down':''}">${money(r.g)}</td><td class="${ch(r.g)>1e-9?'up':ch(r.g)<-1e-9?'down':''}">${sgnPct(ch(r.g))}</td><td>${short(r.gp)}</td></tr>`}).join('');
+
+  // pasos
+  const e=M.e,a=e*(S.P0-S.C)-S.P0,bb=2*e*S.P0;
+  const st=[
+    ['Función de precio',`p(d) = ${fmt(S.P0)}·(1 − d)`,`Con d = ${pct(S.d,1)}: p = ${money(s.p)}.`],
+    ['Función de demanda',`Q(d) = ${fmt(S.Q0)}·(1 + ${fmt(e,3)}·d)`,`Con d = ${pct(S.d,1)}: Q = ${fmt(s.q,1)} paquetes.`],
+    ['Función de ganancia',`G(d) = [${fmt(S.P0)}(1 − d) − ${fmt(S.C)}]·${fmt(S.Q0)}(1 + ${fmt(e,3)}d)`,`Con d = ${pct(S.d,1)}: G = ${money(s.g)}.`],
+    ['Primera derivada',`G′(d) = ${fmt(S.Q0)}·[${fmt(a,1)} − ${fmt(bb,1)}·d]`,`G′(0) = ${money(M.base.gp)}: ${M.base.gp>0?'positiva, el descuento empieza subiendo la ganancia':'negativa, el descuento empieza bajando la ganancia'}.`],
+    ['Punto crítico',`G′(d) = 0  ⇒  d = ${fmt(a,1)} / ${fmt(bb,1)} = ${pct(M.dc)}`,M.dc<0?'Está por debajo de 0: fuera del intervalo.':M.dc>S.dmax?`Está por encima de ${pct(S.dmax,0)}: fuera del intervalo.`:'Está dentro del intervalo permitido.'],
+    ['Segunda derivada',`G″(d) = −2·${fmt(e,3)}·${fmt(S.P0)}·${fmt(S.Q0)} = ${fmt(M.gpp,0)}`,'Negativa: la función es cóncava y el punto crítico es un máximo.'],
+    ['Comparación con los extremos',`G(0) = ${money(b.g)}  ·  G(${pct(S.dmax,0)}) = ${money(M.ext.g)}${doDisc&&M.dc<=S.dmax?'  ·  G(d*) = '+money(o.g):''}`,`El máximo en [0; ${pct(S.dmax,0)}] está en d = ${pct(M.dOpt)}.`],
+    ['Condición de rentabilidad',`|E| = ${fmt(e,3)} ${e>M.thr?'&gt;':'&lt;'} P₀/(P₀ − C) = ${Number.isFinite(M.thr)?fmt(M.thr,3):'∞'}`,e>M.thr?'La demanda es suficientemente sensible para que el descuento pague.':'La demanda no es suficientemente sensible para que el descuento pague.'],
+  ];
+  $('steps').innerHTML=st.map(([t,c,p])=>`<li><div><b>${t}</b><code>${c}</code><p>${p}</p></div></li>`).join('');
+
+  // interpretación
+  const P=[];
+  if(S.C>=S.P0)P.push('El costo unitario es igual o mayor que el precio base, así que el producto se vende sin margen y cualquier descuento aumenta la pérdida.');
+  else if(M.dc<=0){
+    P.push(`La derivada en d = 0 es negativa (G′(0) = ${money(M.base.gp)} por unidad de d). Desde el primer punto, cada 1 % de descuento resta cerca de ${money(-M.base.gp/100)} de ganancia.`);
+    P.push(`El punto crítico d = ${pct(M.dc)} está fuera del intervalo [0; ${pct(S.dmax,0)}]. Como G″(d) &lt; 0, la ganancia decrece en todo el intervalo y el máximo está en el extremo d = 0: vender a ${money(S.P0)} deja ${money(b.g)}.`);
+    P.push(`El margen unitario es ${pct(M.m,1)} (${money(S.P0-S.C)} por paquete). Para que un descuento pague, la demanda tendría que cumplir |E| &gt; ${fmt(M.thr,3)}; con |E| = ${fmt(e,3)} el aumento de ventas no compensa la rebaja.${M.dLoss<S.dmax?` Desde ${pct(M.dLoss,1)} de descuento el precio queda por debajo del costo y cada paquete vendido genera pérdida.`:''}`);
+  }else if(M.dc<=S.dmax){
+    P.push(`G′(0) es positiva: los primeros puntos de descuento aumentan la ganancia. La derivada se anula en d* = ${pct(M.dc)} y, como G″(d) &lt; 0, ese punto es un máximo.`);
+    P.push(`Con d* el precio baja a ${money(o.p)}, las ventas pasan de ${fmt(S.Q0)} a ${fmt(o.q,1)} paquetes y la ganancia sube de ${money(b.g)} a ${money(o.g)} (${sgnPct(ch(o.g))}).`);
+    P.push(`La curva es simétrica alrededor del máximo: con ${pct(2*M.dc,1)} la ganancia vuelve a ${money(b.g)}. ${2*M.dc<S.dmax?'Descuentos mayores que ese valor dejan menos ganancia que no descontar.':'Dentro del intervalo permitido, cualquier descuento deja al menos la ganancia inicial.'}`);
+  }else{
+    P.push(`El punto crítico (${pct(M.dc)}) supera el máximo permitido de ${pct(S.dmax,0)}. En todo el intervalo G′(d) &gt; 0, así que el mejor descuento permitido es el extremo d = ${pct(S.dmax,0)}, con ganancia ${money(o.g)} (${sgnPct(ch(o.g))}).`);
+  }
+  P.push(`<b>Descuento evaluado: ${pct(S.d,1)}.</b> Precio ${money(s.p)}, ${fmt(s.q,1)} paquetes y ganancia ${money(s.g)}, ${sgnPct(ch(s.g))} frente a no descontar. ${S.d===0&&!doDisc?'Es el máximo del intervalo.':s.gp>0?'G′(d) es positiva: un poco más de descuento todavía aumenta la ganancia.':'G′(d) es negativa: más descuento reduce la ganancia.'}${s.p<S.C?' El precio está por debajo del costo unitario.':''}`);
+  $('interp').innerHTML='<h3>Interpretación</h3>'+P.map(t=>`<p>${t}</p>`).join('');
+
+  renderSens(M);
+}
+
+function renderSens(M){
+  const v={P0:S.P0,C:S.C,Q0:S.Q0,dmax:S.dmax},emax=15;
+  const pts=sample(e=>model({...v,E:-e}).dc,.5,emax);
+  chart($('chS'),{label:'Descuento crítico según elasticidad',xmin:.5,xmax:emax,xstep:2,xfmt:x=>fmt(x,1),xlabel:'|E|',ymin:-.6,ymax:Math.max(.3,S.dmax+.05),
+    yfmt:y=>Math.round(y*100)+'%',series:[{pts,cls:'l-g'}],bands:[[M.thr,emax]],
+    vlines:Number.isFinite(M.thr)&&M.thr<emax?[{x:M.thr,cls:'v-thr'}]:[],hlines:[{y:S.dmax,cls:'base'}],
+    markers:[{x:Math.min(emax,Math.max(.5,M.e)),y:M.dc,cls:'m-sel',r:7,text:'|E| = '+fmt(M.e,3)+' → '+pct(M.dc,1)}]});
+  const Es=[...new Set([1.048,2,3,M.thr,6,8,10,12].concat([M.e]).filter(x=>Number.isFinite(x)&&x>0).map(x=>+x.toFixed(3)))].sort((a,c)=>a-c);
+  $('sensRows').innerHTML=Es.map(e=>{const m=model({...v,E:-e});const c=m.base.g?(m.opt.g-m.base.g)/Math.abs(m.base.g):0;
+    return `<tr class="${Math.abs(e-M.e)<1e-3?'is-sel':''}"><td>−${fmt(e,3)}${Math.abs(e-M.thr)<1e-3?' · umbral':''}</td><td>${pct(m.dOpt)}</td><td>${money(m.opt.g)}</td><td class="${c>1e-9?'up':''}">${sgnPct(c)}</td></tr>`}).join('');
+  $('sensText').innerHTML=`<h3>Lectura</h3><p>Con P₀ = ${money(S.P0)} y C = ${money(S.C)}, el descuento solo empieza a convenir cuando |E| supera ${Number.isFinite(M.thr)?fmt(M.thr,3):'∞'}. Aun con demanda muy sensible, d* nunca pasa de ½·(1 − C/P₀) = ${pct((1-S.C/S.P0)/2,1)}: el margen pone un techo al descuento.</p><p>Con la elasticidad actual (|E| = ${fmt(M.e,3)}) el descuento crítico es ${pct(M.dc,1)}${M.dc<=0?', por eso el modelo recomienda no descontar.':'.'}</p>`;
+}
+
+/* ---------- Escenarios (fijos) ---------- */
+(function(){
+  const xmax=.25,ms=PRESETS.map(p=>model(p.v));
+  chart($('chCmp'),{W:960,H:360,label:'Cambio de ganancia por escenario',xmax,ymin:-.5,ymax:.4,yfmt:y=>(y>0?'+':'')+Math.round(y*100)+'%',
+    series:PRESETS.map((p,i)=>({color:p.color,pts:sample(d=>(ms[i].at(d).g-ms[i].base.g)/ms[i].base.g,0,xmax)})),
+    markers:PRESETS.map((p,i)=>({x:ms[i].dOpt,y:(ms[i].opt.g-ms[i].base.g)/ms[i].base.g,cls:'m-opt',r:6,text:p.k,dy:p.k==='A'?18:-10}))});
+  $('cmpLegend').innerHTML=PRESETS.map(p=>`<span><i style="background:var(${p.color})"></i>${p.k} · ${p.name}</span>`).join('');
+  $('cmpRows').innerHTML=PRESETS.map((p,i)=>{const m=ms[i],c=(m.opt.g-m.base.g)/m.base.g;return `<tr data-i="${i}"><td>${p.k} · ${p.name}</td><td>${money(p.v.C)}</td><td>${fmt(p.v.E,3)}</td><td>${fmt(m.thr,3)}</td><td>${pct(m.dc)}</td><td>${pct(m.dOpt)}</td><td>${money(m.base.g)}</td><td>${money(m.opt.g)}</td><td class="${c>1e-9?'up':''}">${sgnPct(c)}</td></tr>`}).join('');
+  $('cmpRows').addEventListener('click',e=>{const tr=e.target.closest('tr');if(!tr)return;Object.assign(S,PRESETS[tr.dataset.i].v);S.d=model(S).dOpt;render();$('laboratorio').scrollIntoView()});
+  $('cmpText').innerHTML=`<h3>Lectura de los escenarios</h3>
+  <p>Con los datos reales (A) la curva cae desde el primer punto: no hay descuento que mejore la ganancia y con 25 % se llega a pérdida (${money(ms[0].ext.g)}).</p>
+  <p>Si los clientes fueran mucho más sensibles (B, E = −8), un descuento de ${pct(ms[1].dOpt)} subiría la ganancia ${sgnPct((ms[1].opt.g-ms[1].base.g)/ms[1].base.g)}. Si el costo bajara a $11.500 (C), el umbral de elasticidad baja a ${fmt(ms[2].thr,3)} y con E = −4 el óptimo es ${pct(ms[2].dOpt)}. Las dos mejoras juntas (D) llevan el óptimo a ${pct(ms[3].dOpt)} con ${sgnPct((ms[3].opt.g-ms[3].base.g)/ms[3].base.g)} de ganancia.</p>
+  <p>El descuento solo es una herramienta de ganancia cuando hay margen suficiente y una demanda que responde con fuerza al precio.</p>`;
+})();
+
+render();
+</script>
+</body>
+</html>
